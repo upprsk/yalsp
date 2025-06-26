@@ -101,14 +101,18 @@ func (s *State) startDiagnosticsFor(doc Document) ([]lsp.Diagnostic, error) {
 			s.logger.Printf("failed to calculate range for %s: %v", doc.URI, err)
 		}
 
-		var severity int
+		var severity int = 1
 		switch log.Prefix {
-		case "debug":
-			severity = 4
 		case "bug":
 			severity = 1
-		case "info":
+		case "error":
+			severity = 1
+		case "warn":
+			severity = 2
+		case "note":
 			severity = 3
+		case "debug":
+			severity = 4
 		}
 
 		s.logger.Println("got error message:", log.Message)
