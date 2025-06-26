@@ -85,6 +85,20 @@ func handleMessage(
 			request.Params.ClientInfo.Version,
 		)
 
+		if request.Params.RootPath != "" {
+			// TODO: save the root of the workspace
+		}
+
+		if request.Params.RootURI != "" {
+			// TODO: save the root of the workspace
+		}
+
+		logger.Printf(
+			"rootPath: %+s, rootURI: %+s",
+			request.Params.RootPath,
+			request.Params.RootURI,
+		)
+
 		response := lsp.NewInitializeResponse(request.Id)
 		writeResponse(output, response)
 		logger.Print("sent initialize reply")

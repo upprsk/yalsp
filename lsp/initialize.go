@@ -12,7 +12,10 @@ type InitializeResponse struct {
 }
 
 type InitializeParams struct {
-	ClientInfo *ClientInfo `json:"clientInfo"`
+	ClientInfo            *ClientInfo `json:"clientInfo"`
+	RootPath              string      `json:"rootPath"`
+	RootURI               string      `json:"rootUri"`
+	InitializationOptions any         `json:"initializationOptions"`
 }
 
 type ClientInfo struct {
