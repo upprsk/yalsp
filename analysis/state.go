@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"log"
@@ -20,6 +19,7 @@ type State struct {
 type Document struct {
 	URI     string
 	tmpPath string
+	lines   [][2]int
 }
 
 type DocumentURI = string
@@ -61,6 +61,7 @@ func (s *State) OpenDocument(uri DocumentURI, text string) error {
 	s.Documents[uri] = Document{
 		URI:     uri,
 		tmpPath: p,
+		lines:   calcLines(text),
 	}
 
 	s.logger.Printf("for file with uri=%+v got path: %+v", uri, p)
@@ -72,6 +73,10 @@ func (s *State) UpdateDocument(uri DocumentURI, text string) error {
 	if !ok {
 		return errors.New("document not found")
 	}
+
+	// update line cache
+	v.lines = calcLines(text)
+	s.Documents[uri] = v
 
 	if _, err := s.fs.AddNewFile(v.URI, text); err != nil {
 		return fmt.Errorf("addNewFile: %w", err)
@@ -96,10 +101,7 @@ func (s *State) startDiagnosticsFor(doc Document) ([]lsp.Diagnostic, error) {
 
 	diags := make([]lsp.Diagnostic, len(logs))
 	for idx, log := range logs {
-		r, err := s.calcRange(doc.tmpPath, log.Span[0], log.Span[1])
-		if err != nil {
-			s.logger.Printf("failed to calculate range for %s: %v", doc.URI, err)
-		}
+		r := doc.sanToRange(log.Span[0], log.Span[1])
 
 		var severity int = 1
 		switch log.Prefix {
@@ -128,38 +130,40 @@ func (s *State) startDiagnosticsFor(doc Document) ([]lsp.Diagnostic, error) {
 	return diags, nil
 }
 
-func (s *State) calcRange(path string, start, end int) (lsp.Range, error) {
-	f, err := s.fs.OpenFileFromPath(path)
-	if err != nil {
-		return lsp.Range{}, fmt.Errorf("open file from name: %w", err)
-	}
-	defer f.Close()
+func (doc Document) positonToSpan(r lsp.Range) [2]int {
+	return [2]int{doc.lines[r.Start.Line][0], doc.lines[r.End.Line][1]}
+}
 
-	scanner := bufio.NewScanner(f)
-	scanner.Split(bufio.ScanLines)
-
-	var r lsp.Range
-
-	for line, idx := 0, 0; scanner.Scan(); line++ {
-		text := scanner.Text()
-		endIdx := idx + len(text) + 1 // add newline
-		if start >= idx && start <= endIdx {
-			r.Start = lsp.Position{Line: line, Character: start - idx}
-			s.logger.Printf("found start location: %v (line=%d, idx=%d)", r.Start, line, idx)
+func (doc Document) sanToRange(start, end int) (r lsp.Range) {
+	for idx, line := range doc.lines {
+		if start >= line[0] && start <= line[1] {
+			r.Start = lsp.Position{Line: idx, Character: start - line[0]}
 		}
 
-		if end >= idx && end <= endIdx {
-			r.End = lsp.Position{Line: line, Character: end - idx}
-			s.logger.Printf("found end location: %v (line=%d, idx=%d)", r.End, line, idx)
-			break
+		if end >= line[0] && end <= line[1] {
+			r.End = lsp.Position{Line: idx, Character: end - line[0]}
 		}
-
-		idx = endIdx
 	}
 
-	if err := scanner.Err(); err != nil {
-		return r, fmt.Errorf("scanner: %w", err)
+	return
+}
+
+func calcLines(text string) [][2]int {
+	var lines [][2]int
+
+	var lineStart int
+	for idx, c := range text {
+		// found newline
+		if c == '\n' {
+			lineRange := [2]int{lineStart, idx}
+			lines = append(lines, lineRange)
+			lineStart = idx + 1
+		}
 	}
 
-	return r, nil
+	if lineStart != len(text) {
+		lines = append(lines, [2]int{lineStart, len(text)})
+	}
+
+	return lines
 }
